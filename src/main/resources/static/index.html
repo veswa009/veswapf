@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>Personal Portfolio</title>
+    <script>
+        const storedTheme = localStorage.getItem("portfolio-theme");
+        const preferredTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = storedTheme || preferredTheme;
+    </script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <div class="pin-overlay hidden" id="pinOverlay" aria-hidden="true">
+        <div class="pin-panel" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
+            <h2 id="pinTitle">Enter PIN</h2>
+            <p>Please enter your PIN to continue.</p>
+            <input id="pinInput" type="password" inputmode="numeric" maxlength="6" placeholder="Enter PIN" aria-label="Enter PIN">
+            <div class="pin-actions">
+                <button class="primary-button" id="pinSubmit" type="button">Unlock</button>
+            </div>
+            <p class="pin-message" id="pinMessage"></p>
+        </div>
+    </div>
+
+    <div class="confirm-overlay hidden" id="confirmOverlay" aria-hidden="true">
+        <div class="confirm-panel" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+            <h3 id="confirmTitle">Confirm</h3>
+            <p id="confirmMessage">Are you sure?</p>
+            <div class="confirm-actions">
+                <button class="secondary-button" id="confirmCancel" type="button">Cancel</button>
+                <button class="primary-button" id="confirmOk" type="button">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <header class="site-header">
+        <div class="brand-group">
+            <a class="brand-link" href="#/" data-link aria-label="Open dashboard">
+                <span class="brand-mark" aria-hidden="true">WOLF</span>
+                <span class="brand-copy">
+                    <strong>veswa009</strong>
+                </span>
+            </a>
+        </div>
+        <nav class="primary-nav" aria-label="Main navigation">
+            <a href="#/" data-link>Dashboard</a>
+            <a href="#/mutual-funds" data-link>Mutual Funds</a>
+            <a href="#/bonds" data-link>Bonds</a>
+            <a href="#/nps" data-link>NPS</a>
+            <a href="#/ppf" data-link>PPF</a>
+            <a href="#/gold" data-link>GOLD</a>
+        </nav>
+        <div class="header-clock" aria-label="Current date and time">
+            <span data-current-date></span>
+            <strong data-current-time>00:00:00</strong>
+        </div>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark and light mode">
+            <span class="theme-icon theme-sun" aria-hidden="true">☀</span>
+            <span class="theme-icon theme-moon" aria-hidden="true">☾</span>
+            <span class="theme-knob" aria-hidden="true"></span>
+            <span class="sr-only" id="themeToggleLabel">Theme</span>
+        </button>
+    </header>
+
+    <main id="app" class="app-shell" tabindex="-1">
+        <section class="loading-panel">
+            <div class="loading-line"></div>
+            <div class="loading-line short"></div>
+            <p>Loading portfolio...</p>
+        </section>
+    </main>
+
+    <script src="app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+Type,Name,Symbol,Quantity,InvestedAmount,CurrentValue,PurchaseDate,Platform,RiskLevel,Notes,LastUpdated
+Stocks,Reliance Industries,RELIANCE,12,33000,35640,2024-08-18,Zerodha,Medium,Energy and consumer exposure,2026-07-21
+Stocks,Tata Consultancy Services,TCS,6,22800,24960,2024-02-11,Zerodha,Medium,Large cap IT holding,2026-07-21
+Mutual Funds,Parag Parikh Flexi Cap,PPFAS-FLEXI,54.2,75000,84250,2023-11-05,Coin,Medium,Long term equity fund,2026-07-21
+Mutual Funds,Nifty 50 Index Fund,NIFTY50-INDEX,91.5,60000,67400,2024-05-21,Groww,Medium,Passive core allocation,2026-07-21
+Gold,Sovereign Gold Bond 2028,SGB2028,8,48000,61200,2022-09-12,RBI/Bank,Low,Gold allocation,2026-07-21
+Crypto,Bitcoin,BTC,0.025,52000,68600,2023-03-10,WazirX,High,High volatility crypto position,2026-07-21
+Fixed Deposit,HDFC Fixed Deposit,HDFC-FD,1,100000,108500,2025-01-15,HDFC Bank,Low,Capital preservation,2026-07-21
+Emergency Fund,Savings Sweep Account,SWEEP,1,150000,153200,2025-07-01,Primary Bank,Low,Liquid cash buffer,2026-07-21
