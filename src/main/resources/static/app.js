@@ -43,6 +43,7 @@ const state = {
     editingEntryId: null,
     mutualFundSort: { ...DEFAULT_MUTUAL_FUND_SORT },
     unsavedChanges: false,
+    editingBondId: null,
     bonds: loadBonds()
 };
 
@@ -180,9 +181,13 @@ function bindManualInputs() {
             const id = input.dataset.entryId;
             const entry = state.bonds.entries.find((e) => e.id === id);
             if (!entry) return;
+            if (state.editingBondId !== id) return;
             const field = input.dataset.field;
             let value = input.value;
-            if (["interest", "yield", "units", "price", "months"].includes(field)) {
+            if (field === "units" || field === "months") {
+                value = value.replace(/[^0-9]/g, "");
+                input.value = value;
+            } else if (["interest", "yield", "price"].includes(field)) {
                 value = value.replace(/[^0-9.]/g, '');
                 const parts = value.split('.').slice(0,2);
                 value = parts[0] + (parts[1] ? '.' + parts[1].slice(0,2) : '');
@@ -190,8 +195,7 @@ function bindManualInputs() {
             }
             entry[field] = value;
             entry.amount = (Number(entry.units || 0) * Number(entry.price || 0)) || 0;
-            saveBonds();
-            renderBonds();
+            renderBondInlineTotals(entry);
             return;
         }
     });
@@ -221,10 +225,27 @@ function bindManualInputs() {
             }
         }
 
-        if (field === 'units' || field === 'price') {
+        if (field === 'units') {
+            const numeric = value.replace(/[^0-9]/g, '');
+            bondInput.value = numeric;
+            const entry = state.bonds.entries.find((e) => e.id === bondInput.dataset.entryId);
+            if (entry && state.editingBondId === entry.id) {
+                entry.units = numeric;
+                entry.amount = (Number(entry.units || 0) * Number(entry.price || 0)) || 0;
+                renderBondInlineTotals(entry);
+            }
+        }
+
+        if (field === 'price') {
             const numeric = value.replace(/[^0-9.]/g, '');
             const parsed = Number(numeric);
             bondInput.value = Number.isFinite(parsed) ? parsed.toFixed(2) : '';
+            const entry = state.bonds.entries.find((e) => e.id === bondInput.dataset.entryId);
+            if (entry && state.editingBondId === entry.id) {
+                entry.price = bondInput.value;
+                entry.amount = (Number(entry.units || 0) * Number(entry.price || 0)) || 0;
+                renderBondInlineTotals(entry);
+            }
         }
     });
 
@@ -302,8 +323,22 @@ function bindManualInputs() {
             return;
         }
 
+        if (action.dataset.action === "edit-bond") {
+            const entryId = action.dataset.entryId;
+            if (!entryId) return;
+            const isEditing = state.editingBondId === entryId;
+            if (isEditing) {
+                state.editingBondId = null;
+                saveBonds();
+            } else {
+                state.editingBondId = entryId;
+            }
+            renderBonds();
+            return;
+        }
+
         if (action.dataset.action === "add-bond") {
-            addBondEntry();
+            addBondEntryFromInput();
             return;
         }
 
@@ -314,12 +349,16 @@ function bindManualInputs() {
     });
 
     document.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" || event.target.id !== "newFundName") {
+        if (event.key !== "Enter" || !["newFundName", "newBondName"].includes(event.target.id)) {
             return;
         }
 
         event.preventDefault();
-        addMutualFundFromInput();
+        if (event.target.id === "newFundName") {
+            addMutualFundFromInput();
+            return;
+        }
+        addBondEntryFromInput();
     });
 }
 
@@ -419,6 +458,7 @@ function renderMutualFunds() {
                 </div>
             </div>
             <div class="fund-list">
+                ${renderFundListHeader()}
                 ${state.mutualFunds.funds.map(renderFundItem).join("")}
                 ${renderAddFundItem()}
             </div>
@@ -428,6 +468,7 @@ function renderMutualFunds() {
 
 function renderBonds() {
     const total = (state.bonds?.entries || []).reduce((s, e) => s + (Number(e.amount)||0), 0);
+    const entries = state.bonds.entries || [];
     app.innerHTML = `
         <section class="page-title-bar simple-title">
             <div>
@@ -446,57 +487,78 @@ function renderBonds() {
             <div class="panel-header">
                 <div>
                     <h2 class="panel-title">Bonds</h2>
-                </div>
-                <div>
-                    <button class="secondary-button" type="button" data-action="add-bond">+ Add</button>
+                    <p class="subtle">Saved locally</p>
                 </div>
             </div>
-            <div class="fund-table-wrap">
-                <table class="fund-table bond-table">
-                    <thead>
-                        <tr>
-                            <th>Bond Issuer</th>
-                            <th>Interest (%)</th>
-                            <th>Tenure</th>
-                            <th>Months</th>
-                            <th>Payout</th>
-                            <th>Rating</th>
-                            <th>Risk</th>
-                            <th>Yield (%)</th>
-                            <th>Units</th>
-                            <th>Price</th>
-                            <th>Amount</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${(state.bonds.entries || []).map((entry) => `
-                            <tr data-bond-row="${escapeAttribute(entry.id)}">
-                                <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="issuer" value="${escapeAttribute(entry.issuer||'')}"></td>
-                                <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="interest" value="${escapeAttribute(entry.interest ? `${entry.interest}%` : '')}"></td>
-                                <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="tenure" value="${escapeAttribute(entry.tenure||'')}"></td>
-                                <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="months" value="${escapeAttribute(entry.months||'')}"></td>
-                                <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="payout" value="${escapeAttribute(entry.payout||'')}"></td>
-                                <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="rating" value="${escapeAttribute(entry.rating||'')}"></td>
-                                <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="risk" value="${escapeAttribute(entry.risk||'')}"></td>
-                                <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="yield" value="${escapeAttribute(entry.yield ? `${entry.yield}%` : '')}"></td>
-                                <td><input class="manual-input amount-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="units" value="${formatAmountForInput(entry.units||'')}"></td>
-                                <td><input class="manual-input amount-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="price" value="${formatAmountForInput(entry.price||'')}"></td>
-                                <td class="amount-cell">${formatNumberNoCurrency(entry.amount || 0)}</td>
-                                <td><button class="remove-button" type="button" data-action="remove-bond" data-entry-id="${escapeAttribute(entry.id)}">Remove</button></td>
-                            </tr>
-                        `).join("")}
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <th colspan="10">Total</th>
-                            <td class="amount-cell">${formatNumberNoCurrency(total)}</td>
-                            <td></td>
-                        </tr>
-                    </tfoot>
-                </table>
+            <div class="fund-list bond-list">
+                ${entries.length ? renderBondTable(entries, total) : ""}
+                ${renderAddBondItem()}
             </div>
         </section>
+    `;
+}
+
+function renderBondTable(entries, total) {
+    return `
+        <div class="fund-table-wrap bond-table-wrap">
+            <table class="fund-table bond-table">
+                <thead>
+                    <tr>
+                        <th>Bond Issuer</th>
+                        <th>Interest (%)</th>
+                        <th>Months</th>
+                        <th>Payout</th>
+                        <th>Rating</th>
+                        <th>Risk</th>
+                        <th>Yield (%)</th>
+                        <th>Units</th>
+                        <th>Price</th>
+                        <th>Overall</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${entries.map((entry) => renderBondEntryRow(entry)).join("")}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="9">Total</th>
+                        <td>
+                            <div class="total-amount-box bond-overall-box" data-bond-total>${formatNumberNoCurrency(total)}</div>
+                        </td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    `;
+}
+
+function renderBondEntryRow(entry) {
+    const isEditingThisEntry = state.editingBondId === entry.id;
+    const isDisabled = !isEditingThisEntry ? "disabled" : "";
+
+    return `
+        <tr data-bond-row="${escapeAttribute(entry.id)}">
+            <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="issuer" value="${escapeAttribute(entry.issuer||'')}" ${isDisabled}></td>
+            <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="interest" value="${escapeAttribute(formatPercentForInput(entry.interest))}" ${isDisabled}></td>
+            <td><input class="manual-input centered-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="months" value="${escapeAttribute(entry.months||'')}" ${isDisabled}></td>
+            <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="payout" value="${escapeAttribute(entry.payout||'')}" ${isDisabled}></td>
+            <td><input class="manual-input centered-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="rating" value="${escapeAttribute(entry.rating||'')}" ${isDisabled}></td>
+            <td><input class="manual-input centered-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="risk" value="${escapeAttribute(entry.risk||'')}" ${isDisabled}></td>
+            <td><input class="manual-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="yield" value="${escapeAttribute(formatPercentForInput(entry.yield))}" ${isDisabled}></td>
+            <td><input class="manual-input centered-input units-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="units" value="${escapeAttribute(formatUnitsForInput(entry.units))}" ${isDisabled}></td>
+            <td><input class="manual-input amount-input" type="text" data-bond-input data-entry-id="${escapeAttribute(entry.id)}" data-field="price" value="${entry.price === "" ? "" : formatAmountForInput(entry.price)}" ${isDisabled}></td>
+            <td>
+                <div class="total-amount-box bond-overall-box" data-bond-overall="${escapeAttribute(entry.id)}">${formatNumberNoCurrency(entry.amount || 0)}</div>
+            </td>
+            <td>
+                <div class="action-box bond-action-box">
+                    <button class="secondary-button edit-button" type="button" data-action="edit-bond" data-entry-id="${escapeAttribute(entry.id)}">${isEditingThisEntry ? "Save" : "Edit"}</button>
+                    <button class="remove-button" type="button" data-action="remove-bond" data-entry-id="${escapeAttribute(entry.id)}">Remove</button>
+                </div>
+            </td>
+        </tr>
     `;
 }
 
@@ -522,6 +584,21 @@ function renderPlaceholderRoute(title) {
     `;
 }
 
+function renderFundListHeader() {
+    if (!state.mutualFunds.funds.length) {
+        return "";
+    }
+
+    return `
+        <div class="fund-list-header" aria-hidden="true">
+            <span>Mutual Fund Name</span>
+            <span>SIP Value</span>
+            <span>LUMPSUM Value</span>
+            <span>Total Value</span>
+        </div>
+    `;
+}
+
 function renderFundItem(fund) {
     const isExpanded = state.expandedFundId === fund.id;
     const totals = fundSummary(fund);
@@ -531,7 +608,9 @@ function renderFundItem(fund) {
             <div class="fund-row">
                 <button class="fund-toggle" type="button" data-action="toggle-fund" data-fund-id="${escapeAttribute(fund.id)}" aria-expanded="${isExpanded}">
                     <span class="fund-name">${escapeHtml(fund.name)}</span>
-                    <span class="fund-meta" data-fund-meta="${escapeAttribute(fund.id)}">SIP ${money(totals.sipAmount)} | Lumpsum ${money(totals.lumpsumAmount)}</span>
+                    <span class="fund-value" data-fund-sip-value="${escapeAttribute(fund.id)}">${money(totals.sipAmount)}</span>
+                    <span class="fund-value" data-fund-lumpsum-value="${escapeAttribute(fund.id)}">${money(totals.lumpsumAmount)}</span>
+                    <span class="fund-value" data-fund-total-value="${escapeAttribute(fund.id)}">${money(totals.totalAmount)}</span>
                     <span class="fund-chevron" aria-hidden="true">${isExpanded ? "-" : "+"}</span>
                 </button>
                 <button class="remove-button fund-remove-button" type="button" data-action="remove-fund" data-fund-id="${escapeAttribute(fund.id)}">Remove</button>
@@ -571,8 +650,8 @@ function renderFundDetails(fund) {
                     <tfoot>
                         <tr>
                             <th scope="row" colspan="3">Total</th>
-                            <td data-fund-total="${escapeAttribute(fund.id)}">
-                                <div class="total-amount-box">${formatNumberNoCurrency(fundSummary(fund).totalAmount)}</div>
+                            <td>
+                                <div class="total-amount-box" data-fund-entry-total="${escapeAttribute(fund.id)}">${formatNumberNoCurrency(fundSummary(fund).totalAmount)}</div>
                             </td>
                             <td colspan="2"></td>
                         </tr>
@@ -587,7 +666,7 @@ function renderFundDetails(fund) {
 function renderFundSortHeader(field, label) {
     const sort = currentMutualFundSort();
     const isActive = sort.field === field;
-    const directionLabel = isActive ? sort.direction.toUpperCase() : "";
+    const directionMarker = isActive ? (sort.direction === "asc" ? "&#9650;" : "&#9660;") : "";
     const ariaSort = isActive ? (sort.direction === "asc" ? "ascending" : "descending") : "none";
     const nextDirection = isActive && sort.direction === "asc" ? "descending" : "ascending";
 
@@ -601,7 +680,7 @@ function renderFundSortHeader(field, label) {
                 aria-label="Sort by ${escapeAttribute(label)} ${nextDirection}"
             >
                 <span>${escapeHtml(label)}</span>
-                <span class="sort-indicator" aria-hidden="true">${directionLabel}</span>
+                <span class="sort-indicator" aria-hidden="true">${directionMarker}</span>
             </button>
         </th>
     `;
@@ -819,14 +898,22 @@ function removeFundEntry(fundId, entryId) {
 
 function renderInlineTotals(fund) {
     const totals = fundSummary(fund);
-    const totalTarget = document.querySelector(`[data-fund-total="${cssEscape(fund.id)}"]`);
-    const metaTarget = document.querySelector(`[data-fund-meta="${cssEscape(fund.id)}"]`);
+    const totalTarget = document.querySelector(`[data-fund-entry-total="${cssEscape(fund.id)}"]`);
+    const sipTarget = document.querySelector(`[data-fund-sip-value="${cssEscape(fund.id)}"]`);
+    const lumpsumTarget = document.querySelector(`[data-fund-lumpsum-value="${cssEscape(fund.id)}"]`);
+    const summaryTotalTarget = document.querySelector(`[data-fund-total-value="${cssEscape(fund.id)}"]`);
 
     if (totalTarget) {
         totalTarget.textContent = formatNumberNoCurrency(totals.totalAmount);
     }
-    if (metaTarget) {
-        metaTarget.textContent = `SIP ${money(totals.sipAmount)} | Lumpsum ${money(totals.lumpsumAmount)}`;
+    if (sipTarget) {
+        sipTarget.textContent = money(totals.sipAmount);
+    }
+    if (lumpsumTarget) {
+        lumpsumTarget.textContent = money(totals.lumpsumAmount);
+    }
+    if (summaryTotalTarget) {
+        summaryTotalTarget.textContent = money(totals.totalAmount);
     }
 }
 
@@ -1244,7 +1331,7 @@ function formatNumberNoCurrency(value) {
 function loadBonds() {
     try {
         const saved = JSON.parse(localStorage.getItem('veswa009-bonds') || '[]');
-        return { entries: Array.isArray(saved) ? saved : [] };
+        return { entries: Array.isArray(saved) ? saved.map((entry) => normalizeBondEntry(entry)) : [] };
     } catch {
         return { entries: [] };
     }
@@ -1256,10 +1343,53 @@ function saveBonds() {
     } catch {}
 }
 
-function addBondEntry() {
-    const entry = {
+function addBondEntryFromInput() {
+    const input = document.querySelector("#newBondName");
+    const issuer = String(input?.value || "").trim();
+    if (!issuer) {
+        input?.focus();
+        return;
+    }
+
+    const entry = createBondEntry(issuer);
+    state.bonds.entries.push(entry);
+    state.editingBondId = entry.id;
+    if (input) {
+        input.value = "";
+    }
+    renderBonds();
+}
+
+function removeBondEntry(entryId) {
+    showConfirmDialog("Are you sure you want to remove this bond?").then((ok) => {
+        if (!ok) return;
+        state.bonds.entries = state.bonds.entries.filter((e) => e.id !== entryId);
+        if (state.editingBondId === entryId) {
+            state.editingBondId = null;
+        }
+        saveBonds();
+        renderBonds();
+    });
+}
+
+function renderAddBondItem() {
+    return `
+        <article class="fund-item add-fund-item">
+            <div class="add-fund-form">
+                <div>
+                    <strong>Add Bond</strong>
+                </div>
+                <input class="manual-input add-fund-input" id="newBondName" type="text" placeholder="New bond name" aria-label="New bond name">
+                <button class="secondary-button" type="button" data-action="add-bond">Add</button>
+            </div>
+        </article>
+    `;
+}
+
+function createBondEntry(issuer = "") {
+    return {
         id: `bond-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        issuer: "",
+        issuer,
         interest: "",
         tenure: "",
         months: "",
@@ -1271,15 +1401,55 @@ function addBondEntry() {
         price: "",
         amount: 0
     };
-    state.bonds.entries.push(entry);
-    saveBonds();
-    renderBonds();
 }
 
-function removeBondEntry(entryId) {
-    state.bonds.entries = state.bonds.entries.filter((e) => e.id !== entryId);
-    saveBonds();
-    renderBonds();
+function normalizeBondEntry(entry) {
+    const normalized = {
+        ...createBondEntry(),
+        ...entry,
+        id: String(entry?.id || createBondEntry().id),
+        issuer: String(entry?.issuer || ""),
+        interest: String(entry?.interest || "").replace(/%/g, ""),
+        tenure: String(entry?.tenure || ""),
+        months: String(entry?.months || ""),
+        payout: String(entry?.payout || ""),
+        rating: String(entry?.rating || ""),
+        risk: String(entry?.risk || ""),
+        yield: String(entry?.yield || "").replace(/%/g, ""),
+        units: formatUnitsForInput(entry?.units),
+        price: isBlankValue(entry?.price) ? "" : formatAmountForInput(entry?.price)
+    };
+    normalized.amount = (Number(normalized.units || 0) * Number(normalized.price || 0)) || 0;
+    return normalized;
+}
+
+function renderBondInlineTotals(entry) {
+    const rowTarget = document.querySelector(`[data-bond-overall="${cssEscape(entry.id)}"]`);
+    const totalTarget = document.querySelector("[data-bond-total]");
+    if (rowTarget) {
+        rowTarget.textContent = formatNumberNoCurrency(entry.amount || 0);
+    }
+    if (totalTarget) {
+        totalTarget.textContent = formatNumberNoCurrency(bondTotal());
+    }
+}
+
+function bondTotal() {
+    return (state.bonds?.entries || []).reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+}
+
+function formatPercentForInput(value) {
+    const text = String(value || "").replace(/%/g, "").trim();
+    return text ? `${text}%` : "";
+}
+
+function formatUnitsForInput(value) {
+    const numeric = String(value || "").replace(/[^0-9]/g, "");
+    return numeric ? String(Number(numeric)) : "";
+}
+
+function isBlankValue(value) {
+    return value === undefined || value === null || String(value).trim() === "";
 }
 
 function showConfirmDialog(message) {
